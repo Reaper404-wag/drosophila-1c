@@ -82,7 +82,7 @@ CARDS = [
      "Удобно, если нужен крупный план."),
 ]
 
-COMMANDS = """cd D:\\python\\python_2.0\\PythonApplication1\\govno
+COMMANDS = """cd <папка проекта>
 
 python run_lab.py list                 список лабораторных
 python run_lab.py stage                пересобрать сцену (муха проходит все 12 лаб)
@@ -120,12 +120,16 @@ def status_rows() -> str:
         row("лабораторных в сцене", f"{len(data['labs'])}")
         row("мозг", f"{_num(data['brain']['нейронов'])} нейронов, "
                     f"{_num(data['brain']['синаптических связей'])} синаптических связей")
-    tel = REPORT / "telemetry.json"
-    if tel.exists():
-        data = json.loads(tel.read_text(encoding="utf-8"))
-        row("проверок методички", f'<span class="ok">{data["passed_checks"]}/'
-                                  f'{data["total_checks"]}</span>')
-        row("муха решила сама", f"{data['solved_by_fly']} из {len(data['labs'])}")
+        # берём итог того самого прогона, который показан на сцене: телеметрия
+        # старого агента показывала здесь 113/113 и противоречила замеру
+        got = sum(sum(lab["frames"][-1]["mask"]) for lab in data["labs"] if lab["frames"])
+        total = sum(len(lab["checks"]) for lab in data["labs"])
+        misses = sum(1 for lab in data["labs"] for f in lab["frames"] if f["failed"])
+        row("проверок сошлось", f'<span class="ok">{got}</span>/{total} '
+                                f'<span class="dim">(промахов {misses})</span>')
+        full = sum(1 for lab in data["labs"]
+                   if lab["frames"] and sum(lab["frames"][-1]["mask"]) == len(lab["checks"]))
+        row("закрыто целиком", f"{full} из {len(data['labs'])} лабораторных")
     circuit = ROOT / "assets" / "circuit.json"
     if circuit.exists():
         data = json.loads(circuit.read_text(encoding="utf-8"))
