@@ -68,13 +68,12 @@ def build_page(lab_id: str, speed: int = 2, delay_ms: int = 16000) -> int:
     Пауза обязательна: страница грузится секунд десять, и без неё муха успевает
     закрыть лабораторную ещё до того, как ffmpeg снимет первый кадр.
     """
-    from fly1c import ones_real, viz_fly3d, viz_stage
+    from fly1c import viz_fly3d, viz_stage
 
     data = json.loads((REPORT / "stage.json").read_text(encoding="utf-8"))
     index = next((i for i, lab in enumerate(data["labs"]) if lab["id"] == lab_id), 0)
     html = (viz_stage.PAGE
             .replace("__DATA__", json.dumps(data, ensure_ascii=False, separators=(",", ":")))
-            .replace("__IBDIR__", json.dumps(str(ones_real.IB_DIR), ensure_ascii=False))
             .replace("<script>__THREE__</script>", "<script>" + viz_fly3d.three_js() + "</script>")
             .replace("__FLYDATA__", viz_fly3d.fly_data_js(lite=True))
             .replace("__RIG__", viz_fly3d.RIG_JS))

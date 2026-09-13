@@ -24,7 +24,7 @@ def _print_checks(world: World, lab: dict) -> None:
 
 
 def cmd_list(_: argparse.Namespace) -> int:
-    print(f"{'id':<22} {'track':<14} ops  checks  title")
+    print(f"{'id':<22} {'трек':<14} ходов  проверок  название")
     for lab in LABS:
         print(
             f"{lab['id']:<22} {lab['track']:<14} {len(lab['ops']):>3}  "
@@ -49,28 +49,28 @@ def _run_one(lab_id: str, world: World, agent_name: str, episodes: int, dump: bo
     else:
         result = MushroomBodyAgent().run(world, lab, episodes=episodes)
         if not result["ok"]:
-            print("  fly did not solve; finishing with oracle so dump is complete")
+            print("  муха не добила; доигрывает оракул, чтобы выгрузка была полной")
             result["fly"] = dict(result)
             result.update(OracleAgent().run(world, lab))
             result["agent"] = "fly+oracle"
     print(
-        f"  agent={result['agent']} ok={result['ok']} "
-        f"checks={result.get('passed', result.get('best'))}/{result.get('checks')}"
+        f"  решал={result['agent']} готово={result['ok']} "
+        f"проверок={result.get('passed', result.get('best'))}/{result.get('checks')}"
     )
     if result.get("solved_at"):
-        print(f"  fly solved at episode {result['solved_at']}")
+        print(f"  муха справилась на эпизоде {result['solved_at']}")
     _print_checks(world, lab)
     if dump:
         out = ROOT / "dumps" / lab["track"] / lab["id"]
         dump_world(world, out)
         write_vm_loader(out, ib_name=world.config.name)
-        print(f"  dump -> {out}")
+        print(f"  выгрузка -> {out}")
     return result
 
 
 def cmd_run(args: argparse.Namespace) -> int:
     if args.id not in BY_ID:
-        print("unknown lab", args.id)
+        print("не знаю такой лабораторной:", args.id)
         return 2
     world = World()
     result = _run_one(args.id, world, args.agent, args.episodes, dump=not args.no_dump)
@@ -79,7 +79,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_track(args: argparse.Namespace) -> int:
     if args.name not in TRACKS:
-        print("tracks:", ", ".join(TRACKS))
+        print("треки:", ", ".join(TRACKS))
         return 2
     world = World()
     failed = False
@@ -93,10 +93,10 @@ def cmd_track(args: argparse.Namespace) -> int:
     dump_world(world, out)
     write_vm_loader(out, ib_name=world.config.name)
     ones_real.write_status(ROOT / "dumps" / "platform_status.json")
-    print(f"\nfinal dump -> {out}")
+    print(f"\nитоговая выгрузка -> {out}")
     plat = ones_real.find_platform()
     if plat:
-        print("1C platform:", plat)
+        print("платформа 1С:", plat)
     else:
         print("1С на хосте не найдена.")
     return 1 if failed else 0
@@ -105,7 +105,7 @@ def cmd_track(args: argparse.Namespace) -> int:
 def cmd_all(args: argparse.Namespace) -> int:
     rc = 0
     for name in TRACKS:
-        print(f"\n######## TRACK {name} ########")
+        print(f"\n######## ТРЕК {name} ########")
         ns = argparse.Namespace(
             name=name, agent=args.agent, episodes=args.episodes, no_dump=args.no_dump
         )
@@ -132,7 +132,7 @@ def cmd_live(args: argparse.Namespace) -> int:
     from fly1c import trace, viz_live
 
     if args.id not in BY_ID:
-        print("unknown lab", args.id)
+        print("не знаю такой лабораторной:", args.id)
         return 2
     data = trace.record(args.id, episodes=args.episodes)
     out = viz_live.build(data, ROOT / "report" / f"live_{args.id}.html")
@@ -173,7 +173,7 @@ def cmd_stage(args: argparse.Namespace) -> int:
 
     ids = args.labs.split(",") if args.labs else None
     data = stage.write(ROOT / "report" / "stage.json", episodes=args.episodes, lab_ids=ids)
-    out = viz_stage.build(data, ROOT / "report" / "stage.html", str(ones_real.IB_DIR),
+    out = viz_stage.build(data, ROOT / "report" / "stage.html",
                           lite=args.lite, cdn=args.cdn)
     print(f"лабораторных в сцене: {len(data['labs'])}")
     print(f"сцена: {out}")
@@ -283,15 +283,15 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Fly / oracle runner for 1C student labs")
+    p = argparse.ArgumentParser(description="Муха закрывает лабораторные по 1С")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("list", help="list labs")
-    r = sub.add_parser("run", help="run one lab")
+    sub.add_parser("list", help="список лабораторных и треков")
+    r = sub.add_parser("run", help="прогон одной лабораторной")
     r.add_argument("id")
     r.add_argument("--agent", choices=["oracle", "fly", "flywire"], default="oracle")
     r.add_argument("--episodes", type=int, default=40)
     r.add_argument("--no-dump", action="store_true")
-    t = sub.add_parser("track", help="run a whole configuration track")
+    t = sub.add_parser("track", help="прогон всего трека конфигурации")
     t.add_argument("name", choices=list(TRACKS))
     t.add_argument("--agent", choices=["oracle", "fly", "flywire"], default="oracle")
     t.add_argument("--episodes", type=int, default=30)
@@ -324,7 +324,7 @@ def main() -> int:
     rp = sub.add_parser("report", help="прогон + HTML-визуализация в report/")
     rp.add_argument("--episodes", type=int, default=30)
     rp.add_argument("--agent", choices=["flywire", "fly"], default="flywire")
-    a = sub.add_parser("all", help="run every track")
+    a = sub.add_parser("all", help="прогнать все треки подряд")
     a.add_argument("--agent", choices=["oracle", "fly", "flywire"], default="oracle")
     a.add_argument("--episodes", type=int, default=30)
     a.add_argument("--no-dump", action="store_true")

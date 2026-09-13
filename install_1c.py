@@ -3,7 +3,7 @@
 Умеет: zip с учебной версией (training_8_3_x_Windows.zip), распакованную папку,
 setup.exe или сразу «1CEnterprise 8.msi».
 
-    python install_1c.py "C:\\Users\\Reaper\\Downloads\\training_8_3_27_1508_Windows.zip"
+    python install_1c.py "D:\distrib\training_8_3_27_1508_Windows.zip"
     python install_1c.py --check
 
 После установки сам проверяет, видит ли проект платформу и нужна ли ей лицензия.

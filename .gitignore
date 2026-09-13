@@ -1,7 +1,5 @@
 # данные коннектома — качаются скриптом (350 МБ)
-connectome/*.csv.gz
-connectome/*.npz
-connectome/*.npy
+connectome/
 
 # меши NeuroMechFly — качаются скриптом (17 МБ)
 assets/nmf/
@@ -14,19 +12,14 @@ assets/nmf/
 ib/
 dumps/
 logs/
-report/*.html
-report/*.json
+report/
 assets/cloud.json
+assets/cloud_lite.json
 assets/fly3d.json
 assets/fly3d_lite.json
-scratch_probe/
 
 # питон
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
-
-# чужое и собранное, что случайно попадается под руку
-vendor/
-report/
-assets/cloud_lite.json

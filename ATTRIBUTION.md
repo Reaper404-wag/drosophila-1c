@@ -5,7 +5,7 @@
 ## Коннектом FlyWire v783 (CC BY 4.0)
 
 Полный коннектом мозга дрозофилы: 139 255 нейронов, 3,87 млн связей, 34 млн синапсов
-с координатами. Скачивается скриптом `tools/fetch_connectome.py` из публичного хранилища
+с координатами. Скачивается скриптом `tools/fetch_data.py` из публичного хранилища
 `storage.googleapis.com/flywire-data/codex/data/fafb/783/`.
 
 * Dorkenwald S. et al. **Neuronal wiring diagram of an adult brain.** Nature, 2024.
@@ -16,7 +16,7 @@
 ## NeuroMechFly (Apache-2.0)
 
 Биомеханическая модель взрослой дрозофилы: 65 деталей тела в STL и SDF с суставами.
-Скачивается скриптом `tools/fetch_meshes.py` из https://github.com/NeLy-EPFL/NeuroMechFly
+Скачивается скриптом `tools/fetch_data.py` из https://github.com/NeLy-EPFL/NeuroMechFly
 
 * Lobato-Rios V. et al. **NeuroMechFly, a neuromechanical model of adult Drosophila
   melanogaster.** Nature Methods, 2022.

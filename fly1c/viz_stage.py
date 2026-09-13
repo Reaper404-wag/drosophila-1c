@@ -180,7 +180,6 @@ font:11.5px "Cascadia Mono",Consolas,monospace;color:#2b2b2b}
 <script>__RIG__</script>
 <script>
 const D = __DATA__;
-const IB_DIR = __IBDIR__;
 
 FlyRig.init(document.getElementById('flybox'), FLY3D);
 
@@ -412,7 +411,7 @@ function pick(i) {
     + `<code>python run_lab.py build ${lab.id}</code> `
     + `<code>python run_lab.py seed ${lab.id}</code> `
     + `<code>python run_lab.py open ${lab.id}</code><br>`
-    + `файлы базы: <code>${IB_DIR}\\${lab.id}</code>, конфигуратор — <code>--designer</code>`;
+    + `файлы базы: <code>ib/${lab.id}</code>, конфигуратор — <code>--designer</code>`;
   heat.fill(0);
   renderEnterprise(); renderTree(); renderChecks();
 }
@@ -507,7 +506,7 @@ requestAnimationFrame(loop);
 </html>"""
 
 
-def build(data: dict[str, Any], out: Path, ib_dir: str, lite: bool = False,
+def build(data: dict[str, Any], out: Path, ib_dir: str = "", lite: bool = False,
           cdn: bool = False) -> Path:
     """lite/cdn — облегчённый вариант для быстрой проверки в панели предпросмотра."""
     from . import viz_fly3d
@@ -516,7 +515,7 @@ def build(data: dict[str, Any], out: Path, ib_dir: str, lite: bool = False,
              "</script>" if cdn else "<script>" + viz_fly3d.three_js() + "</script>")
     html = PAGE.replace(
         "__DATA__", json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    ).replace("__IBDIR__", json.dumps(ib_dir, ensure_ascii=False))
+    )
     html = (html.replace("<script>__THREE__</script>", three)
             .replace("__FLYDATA__", viz_fly3d.fly_data_js(lite=lite))
             .replace("__RIG__", viz_fly3d.RIG_JS))
