@@ -1,0 +1,32 @@
+# данные коннектома — качаются скриптом (350 МБ)
+connectome/*.csv.gz
+connectome/*.npz
+connectome/*.npy
+
+# меши NeuroMechFly — качаются скриптом (17 МБ)
+assets/nmf/
+
+# платформа 1С: лицензионный софт, в репозиторий не кладём
+1С/
+1Cexe/
+
+# всё, что собирается заново
+ib/
+dumps/
+logs/
+report/*.html
+report/*.json
+assets/cloud.json
+assets/fly3d.json
+assets/fly3d_lite.json
+scratch_probe/
+
+# питон
+__pycache__/
+*.pyc
+.venv/
+
+# чужое и собранное, что случайно попадается под руку
+vendor/
+report/
+assets/cloud_lite.json

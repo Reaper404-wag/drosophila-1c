@@ -1,0 +1,337 @@
+[
+ {
+  "title": "Лабораторная работа №1",
+  "checks": [
+   {
+    "check": "has_subsystem",
+    "name": "События"
+   },
+   {
+    "check": "has_catalog",
+    "name": "ВидыКонтактов"
+   },
+   {
+    "check": "has_subsystem",
+    "name": "Контакты"
+   },
+   {
+    "check": "has_catalog",
+    "name": "ВидыКонтактов",
+    "description_length": 50
+   },
+   {
+    "check": "has_catalog",
+    "name": "СтатусыДрузей"
+   },
+   {
+    "check": "has_catalog",
+    "name": "Друзья"
+   },
+   {
+    "check": "has_catalog",
+    "name": "Друзья",
+    "description_length": 150
+   },
+   {
+    "check": "has_attribute",
+    "object": "Catalog.Друзья",
+    "name": "Пол",
+    "type": "EnumRef.Пол"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Catalog.Друзья",
+    "name": "Статус",
+    "type": "CatalogRef.СтатусыДрузей"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Catalog.Друзья",
+    "name": "Комментарий",
+    "type": "String(0)"
+   },
+   {
+    "check": "has_tabular_section",
+    "object": "Catalog.Друзья",
+    "name": "Контакты"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Catalog.Друзья.TabularSection.Контакты",
+    "name": "Контакт",
+    "type": "CatalogRef.ВидыКонтактов"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Catalog.Друзья.TabularSection.Контакты",
+    "name": "Значение",
+    "type": "String(200)"
+   },
+   {
+    "check": "has_catalog",
+    "name": "СтатусыСобытий"
+   },
+   {
+    "check": "has_catalog",
+    "name": "СтатусыСобытий",
+    "description_length": 150
+   },
+   {
+    "check": "has_catalog",
+    "name": "События"
+   },
+   {
+    "check": "has_catalog",
+    "name": "События",
+    "description_length": 150
+   },
+   {
+    "check": "has_attribute",
+    "object": "Catalog.События",
+    "name": "ДатаНачала",
+    "type": "Date"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Catalog.События",
+    "name": "ДатаОкончания",
+    "type": "Date"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Catalog.События",
+    "name": "Описание",
+    "type": "String(0)"
+   },
+   {
+    "check": "has_tabular_section",
+    "object": "Catalog.События",
+    "name": "Участники"
+   }
+  ],
+  "id": "pdf_01"
+ },
+ {
+  "title": "Лабораторная работа №2",
+  "checks": [
+   {
+    "check": "has_register",
+    "name": "ФинансовыеОперации"
+   },
+   {
+    "check": "register_dimension",
+    "register": "ФинансовыеОперации",
+    "name": "Событие"
+   },
+   {
+    "check": "register_dimension",
+    "register": "ФинансовыеОперации",
+    "name": "Друг"
+   },
+   {
+    "check": "register_dimension",
+    "register": "ФинансовыеОперации",
+    "name": "Сумма"
+   },
+   {
+    "check": "has_subsystem",
+    "name": "Финансы"
+   }
+  ],
+  "id": "pdf_02"
+ },
+ {
+  "title": "Лабораторная работа №3",
+  "checks": [
+   {
+    "check": "has_subsystem",
+    "name": "Финансы"
+   }
+  ],
+  "id": "pdf_03"
+ },
+ {
+  "title": "Лабораторная работа №4",
+  "checks": [
+   {
+    "check": "has_report",
+    "name": "ГрафикиПоДням"
+   },
+   {
+    "check": "has_subsystem",
+    "name": "Финансы"
+   }
+  ],
+  "id": "pdf_04"
+ },
+ {
+  "title": "Лабораторная работа №5",
+  "checks": [
+   {
+    "check": "has_catalog",
+    "name": "Друзья"
+   },
+   {
+    "check": "has_report",
+    "name": "СколькоДенег"
+   },
+   {
+    "check": "has_tabular_section",
+    "object": "Catalog.Друзья",
+    "name": "Друг"
+   },
+   {
+    "check": "has_catalog",
+    "name": "События"
+   },
+   {
+    "check": "has_subsystem",
+    "name": "Контакты"
+   },
+   {
+    "check": "has_subsystem",
+    "name": "События"
+   },
+   {
+    "check": "has_subsystem",
+    "name": "Финансы"
+   }
+  ],
+  "id": "pdf_05"
+ },
+ {
+  "title": "Лабораторная работа №1. Работа со справочниками",
+  "checks": [
+   {
+    "check": "has_subsystem",
+    "name": "Документы"
+   },
+   {
+    "check": "has_catalog",
+    "name": "ВидыСтатейДоходовИРасходов"
+   },
+   {
+    "check": "has_subsystem",
+    "name": "Справочники"
+   },
+   {
+    "check": "has_catalog",
+    "name": "СтатьиДоходовИРасходов"
+   },
+   {
+    "check": "has_catalog",
+    "name": "СтатьиДоходовИРасходов",
+    "hierarchical": true
+   },
+   {
+    "check": "has_catalog",
+    "name": "ФизическиеЛица"
+   }
+  ],
+  "id": "pdf_06"
+ },
+ {
+  "title": "Лабораторная работа №2. Работа с документами",
+  "checks": [
+   {
+    "check": "has_document",
+    "name": "ВыдачаДенегВДолг"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Document.ВыдачаДенегВДолг",
+    "name": "ФизическоеЛицо",
+    "type": "CatalogRef.ФизическиеЛица"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Document.ВыдачаДенегВДолг",
+    "name": "Сумма",
+    "type": "Number(15,2)"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Document.ВыдачаДенегВДолг",
+    "name": "Содержание",
+    "type": "String(100)"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Document.ВыдачаДенегВДолг",
+    "name": "ДатаВозврата",
+    "type": "Date"
+   },
+   {
+    "check": "has_document",
+    "name": "ВозвратДолга"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Document.ВозвратДолга",
+    "name": "ФизическоеЛицо",
+    "type": "CatalogRef.ФизическоеЛицо"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Document.ВозвратДолга",
+    "name": "ВозвратФизическомуЛицу",
+    "type": "Boolean"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Document.ВозвратДолга",
+    "name": "Сумма",
+    "type": "Number(15,2)"
+   },
+   {
+    "check": "has_attribute",
+    "object": "Document.ВозвратДолга",
+    "name": "Комментарий",
+    "type": "String(100)"
+   }
+  ],
+  "id": "pdf_07"
+ },
+ {
+  "title": "Лабораторная работа №3. Создание регистров накопления",
+  "checks": [
+   {
+    "check": "has_register",
+    "name": "ДвижениеДенежныхСредств"
+   },
+   {
+    "check": "register_dimension",
+    "register": "ДвижениеДенежныхСредств",
+    "name": "СтатьяДДС"
+   },
+   {
+    "check": "has_register",
+    "name": "Взаиморасчеты"
+   },
+   {
+    "check": "register_resource",
+    "register": "Взаиморасчеты",
+    "name": "Сумма"
+   },
+   {
+    "check": "has_register",
+    "name": "ДвиженияДенежныхСредств"
+   }
+  ],
+  "id": "pdf_08"
+ },
+ {
+  "title": "Лабораторная работа №6. Формирование отчетов",
+  "checks": [
+   {
+    "check": "has_subsystem",
+    "name": "Отчет"
+   },
+   {
+    "check": "has_subsystem",
+    "name": "Отчеты"
+   }
+  ],
+  "id": "pdf_11"
+ }
+]
