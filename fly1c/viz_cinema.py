@@ -80,7 +80,9 @@ lScene.add(new THREE.HemisphereLight(0x22344a, 0x05080c, 0.25));
 const key = new THREE.SpotLight(0xffe6c0, 2.6, 40, 0.55, 0.5, 1.2);
 key.position.set(5, -7, 9);
 key.castShadow = true;
-key.shadow.mapSize.set(1024, 1024);
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0008;
+key.shadow.normalBias = 0.035;
 lScene.add(key);
 const rim = new THREE.SpotLight(0x63d6ff, 1.5, 40, 0.7, 0.7, 1.1);
 rim.position.set(-7, 5, 4);
@@ -299,8 +301,8 @@ PALETTE.forEach(c => palFlat.push(...c));
 
 const cloudMat = new THREE.ShaderMaterial({
   uniforms: {
-    uSize: {value: 2.0},
-    uAlpha: {value: Math.min(0.22, Math.max(0.02, 26.0 / Math.sqrt(N)))},
+    uSize: {value: 1.9},
+    uAlpha: {value: Math.min(0.22, Math.max(0.012, 18.0 / Math.sqrt(N)))},
     uPal: {value: palFlat},
     uNear: {value: 5.2},
     uFar: {value: 11.5},
@@ -374,9 +376,9 @@ document.getElementById('spin').onclick = e => {
 let bright = false;
 document.getElementById('dense').onclick = e => {
   bright = !bright;
-  const a0 = Math.min(0.22, Math.max(0.02, 26.0 / Math.sqrt(N)));
+  const a0 = Math.min(0.22, Math.max(0.012, 18.0 / Math.sqrt(N)));
   cloudMat.uniforms.uAlpha.value = bright ? a0 * 2.2 : a0;
-  cloudMat.uniforms.uSize.value = bright ? 2.8 : 2.0;
+  cloudMat.uniforms.uSize.value = bright ? 2.6 : 1.9;
   e.target.textContent = 'точки: ' + (bright ? 'мягче' : 'ярче');
 };
 
@@ -401,9 +403,9 @@ function loop(now) {
   prev = now;
   animateFly(dt, now / 1000);
   if (spin) t += 0.0035;
-  const r = 10.5;
-  lCam.position.set(Math.cos(t) * r, Math.sin(t) * r, 3.4);
-  lCam.lookAt(0, 0, -1.15);
+  const r = 13.5;
+  lCam.position.set(Math.cos(t) * r, Math.sin(t) * r, 4.2);
+  lCam.lookAt(0, 0, -0.9);
   cloud.rotation.y = Math.sin(t * 0.7) * 0.45;   // лёгкий поворот, а не карусель
   rCam.position.set(0, 0, 8.4);
   rCam.up.set(0, 1, 0);

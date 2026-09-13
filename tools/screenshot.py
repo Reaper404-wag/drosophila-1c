@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -54,10 +55,10 @@ public class Win {
 '@
 Add-Type -TypeDefinition $src -Language CSharp
 $proc = Get-Process -Id __PID__ -ErrorAction SilentlyContinue
-if (-not $proc) { Write-Output "NOWINDOW"; exit }
-$h = $proc.MainWindowHandle
-if ($h -eq 0) {
-  $h = (Get-Process msedge, chrome -ErrorAction SilentlyContinue |
+$h = 0
+if ($proc) { $h = $proc.MainWindowHandle }
+if (-not $h -or $h -eq 0) {
+  $h = (Get-Process -ErrorAction SilentlyContinue |
         Where-Object { $_.MainWindowTitle -like '*__TITLE__*' } |
         Select-Object -First 1).MainWindowHandle
 }
@@ -81,6 +82,22 @@ Write-Output "OK"
 """
 
 
+TITLEBAR = 40      # заголовок окна Edge в режиме приложения
+BORDER = 8         # тени и рамка по краям
+
+
+def crop(path: Path) -> None:
+    """Срезаем рамку окна: в кадре должна остаться только сама страница."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+    with Image.open(path) as img:
+        w, h = img.size
+        box = (BORDER, TITLEBAR, max(BORDER + 1, w - BORDER), max(TITLEBAR + 1, h - BORDER))
+        img.crop(box).save(path)
+
+
 def browser() -> Path:
     for path in EDGE:
         if path.exists():
@@ -96,17 +113,33 @@ def shoot(name: str) -> None:
         return
     DOCS.mkdir(exist_ok=True)
     out = DOCS / out_name
+    # чистый профиль: иначе в кадр лезут плашки вроде «неподдерживаемый флаг»
+    # и чужие настройки браузера
+    profile = Path(tempfile.gettempdir()) / "fly1c-shots"
     proc = subprocess.Popen([
         str(browser()),
         f"--app=file:///{page.as_posix()}",
         f"--window-size={width},{height}",
         "--window-position=0,0",
         "--new-window",
+        f"--user-data-dir={profile}",
+        "--no-first-run",
+        "--no-default-browser-check",
         "--disable-features=Translate",
     ])
     try:
         print(f"  {name}: жду отрисовки {wait} с …", flush=True)
         time.sleep(wait)
+        # тяжёлые страницы открываются дольше: даём окну время появиться
+        for _ in range(10):
+            found = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 f"if (Get-Process | Where-Object {{ $_.MainWindowTitle -like '*{title}*' }}) "
+                 "{ 'YES' } else { 'NO' }"],
+                capture_output=True, text=True)
+            if "YES" in (found.stdout or ""):
+                break
+            time.sleep(3)
         script = (CAPTURE.replace("__PID__", str(proc.pid))
                   .replace("__TITLE__", title)
                   .replace("__OUT__", str(out).replace("\\", "\\\\")))
@@ -120,6 +153,7 @@ def shoot(name: str) -> None:
         if "NOWINDOW" in answer or not out.exists():
             print(f"  {name}: окно браузера не найдено, снимок не сделан")
             return
+        crop(out)
         print(f"  {name}: {out} ({out.stat().st_size // 1024} КБ)")
     finally:
         proc.terminate()
