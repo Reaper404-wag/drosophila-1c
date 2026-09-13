@@ -14,6 +14,8 @@ ASSETS = ROOT / "assets"
 RIG_JS = r"""
 window.FlyRig = (function () {
   let renderer, scene, camera, root, nodes = {}, glasses, keys = [], clock = 0;
+  // какая передняя лапка с какой стороны по y — считаем по модели, а не гадаем
+  let sideByY = {plus: 'L', minus: 'R'}, bodyHome = null, body = null;
   let host, spot;
   const S = 1.0;
 
@@ -105,6 +107,85 @@ window.FlyRig = (function () {
     return g;
   }
 
+  /* Раскладка настоящая: русские буквы и латиница делят одну клавишу ровно так же,
+     как на физической клавиатуре ЙЦУКЕН/QWERTY. Поэтому «С» из «Справочники» и «C»
+     из «CatalogRef» жмутся одной и той же кнопкой — это не совпадение, это раскладка. */
+  const LAYOUT = [
+    {rus: 'ё1234567890-=', lat: '`1234567890-='},
+    {rus: 'йцукенгшщзхъ',  lat: 'qwertyuiop[]'},
+    {rus: 'фывапролджэ',   lat: "asdfghjkl;'"},
+    {rus: 'ячсмитьбю.',    lat: 'zxcvbnm,./'},
+  ];
+  // верхний регистр цифрового ряда: двоеточие, скобки и прочее из логов 1С
+  const SHIFT = {'!': '1', '"': '2', '№': '3', ';': '4', '%': '5', ':': '6',
+                 '?': '7', '*': '8', '(': '9', ')': '0', '_': '-', '+': '='};
+  const keyByChar = new Map();
+
+  function keyLabel(rus, lat) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 64;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#e9ede9'; c.fillRect(0, 0, 64, 64);
+    c.fillStyle = '#2c332e'; c.font = 'bold 30px system-ui,sans-serif';
+    c.textAlign = 'center'; c.fillText(rus.toUpperCase(), 32, 44);
+    if (lat && lat !== rus) {
+      c.fillStyle = '#8d968f'; c.font = '18px system-ui,sans-serif';
+      c.textAlign = 'left'; c.fillText(lat.toUpperCase(), 5, 20);
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 4;
+    return tex;
+  }
+
+  /* Клавиша знает свой символ: это и есть та карта, по которой лапка ищет,
+     куда бить. Индекс в массиве keys ничего не решает. */
+  function addKey(g, row, col, cols, rus, lat, keyTop, wide) {
+    const pitch = 0.16, w = wide ? pitch * 6.2 : pitch * 0.88;
+    const y = -(cols - 1) * pitch / 2 + col * pitch;
+    const k = new THREE.Mesh(
+      new THREE.BoxGeometry(pitch * 0.88, w, 0.05),
+      [0, 1, 2, 3, 4, 5].map(i => new THREE.MeshStandardMaterial({
+        color: 0xdfe4df, roughness: 0.6,
+        map: i === 4 ? keyLabel(rus, lat) : null,
+      }))
+    );
+    k.position.set(0.92 - row * 0.175, y, keyTop + 0.025);
+    k.castShadow = true;
+    k.userData = {home: k.position.z, rus, lat};
+    g.add(k); keys.push(k);
+    if (rus) keyByChar.set(rus, k);
+    if (lat && lat !== rus) keyByChar.set(lat, k);
+    return k;
+  }
+
+  function buildKeyboard(keyTop) {
+    const g = new THREE.Group();
+    LAYOUT.forEach((row, r) => {
+      const n = Math.max(row.rus.length, row.lat.length);
+      for (let c = 0; c < n; c++) {
+        addKey(g, r, c, n, row.rus[c] || '', row.lat[c] || '', keyTop, false);
+      }
+    });
+    const space = addKey(g, 4, 0, 1, '', '', keyTop, true);
+    space.geometry = new THREE.BoxGeometry(0.14, 1.0, 0.05);
+    keyByChar.set(' ', space);
+    // верхний регистр и буквы-исключения ведут на ту же физическую клавишу
+    for (const [ch, base] of Object.entries(SHIFT)) {
+      const k = keyByChar.get(base);
+      if (k) keyByChar.set(ch, k);
+    }
+    for (const ch of [...keyByChar.keys()]) {
+      const up = ch.toUpperCase();
+      if (up !== ch && !keyByChar.has(up)) keyByChar.set(up, keyByChar.get(ch));
+    }
+    // длинное тире в логах 1С набирается той же клавишей, что и дефис
+    for (const [ch, base] of Object.entries({'—': '-', '–': '-'})) {
+      const k = keyByChar.get(base);
+      if (k) keyByChar.set(ch, k);
+    }
+    return g;
+  }
+
   function buildDesk(keyTop) {
     const g = new THREE.Group();
     // высоты подобраны по самой модели: задние лапки стоят на столе (z=-1.92),
@@ -123,14 +204,7 @@ window.FlyRig = (function () {
     base.position.set(0.62, 0, keyTop - 0.1);
     base.receiveShadow = true;
     g.add(base);
-    const keyMat = new THREE.MeshStandardMaterial({color: 0x4e5a53, roughness: 0.7});
-    for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 11; c++) {
-        const k = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.05), keyMat.clone());
-        k.position.set(0.94 - r * 0.19, -1.0 + c * 0.2, keyTop + 0.02);
-        g.add(k); keys.push(k);
-      }
-    }
+    g.add(buildKeyboard(keyTop));
     return g;
   }
 
@@ -165,6 +239,7 @@ window.FlyRig = (function () {
     const DESK_TOP = -1.92;
     // высоту тела задают средние лапки: они самые короткие, тянуться им некуда
     const mid = new THREE.Box3().setFromObject(nodes['LMTarsus5'] || fly);
+    body = fly;
     fly.position.z += DESK_TOP - mid.min.z;
     fly.updateMatrixWorld(true);
     // задние поджимаются до столешницы — у них запас хода есть
@@ -175,6 +250,11 @@ window.FlyRig = (function () {
     fly.updateMatrixWorld(true);
     const front = new THREE.Box3().setFromObject(nodes['LFTarsus5'] || fly);
     scene.add(buildDesk(front.min.z - 0.03));
+    const ly = new THREE.Vector3(), ry = new THREE.Vector3();
+    nodes['LFTarsus5'].getWorldPosition(ly);
+    nodes['RFTarsus5'].getWorldPosition(ry);
+    sideByY = ly.y > ry.y ? {plus: 'L', minus: 'R'} : {plus: 'R', minus: 'L'};
+    bodyHome = fly.position.clone();
 
     glasses = buildGlasses();
     (nodes['Head'] || fly).add(glasses);
@@ -241,6 +321,91 @@ window.FlyRig = (function () {
     measure(best.a, best.b, best.c);
   }
 
+  /* Куда бить: подбираем углы суставов так, чтобы кончик лапки (Tarsus5) попал
+     в центр конкретной клавиши. Перебор грубый, но считается один раз на клавишу
+     и кладётся в кэш — дальше поза просто берётся готовой. */
+  const ikCache = new Map();
+  const TARSUS = -0.05;   // положение последнего сустава при ударе по клавише
+  const _v = new THREE.Vector3(), _t = new THREE.Vector3();
+
+  function legIK(prefix, key) {
+    const tag = prefix + '|' + key.userData.rus + key.position.y.toFixed(3);
+    if (ikCache.has(tag)) return ikCache.get(tag);
+    const tip = nodes[prefix + 'Tarsus5'];
+    const base = nodes[prefix + 'Coxa_yaw'] || nodes[prefix + 'Coxa'];
+    if (!tip || !base) return null;
+    // считаем от домашнего положения корпуса: иначе поза предыдущей клавиши
+    // уезжает в кэш следующей и ошибка накапливается
+    homeBody();
+    if (body) body.updateMatrixWorld(true);
+    key.getWorldPosition(_t);
+    _t.z += 0.06;                      // целимся в верхнюю грань, а не в центр кубика
+    const measure = (a) => {
+      rot(prefix + 'Coxa_yaw', a[0]);
+      rot(prefix + 'Femur', a[1]);
+      rot(prefix + 'Tibia', a[2]);
+      rot(prefix + 'Coxa_roll', a[3]);
+      rot(prefix + 'Coxa', a[4]);
+      // тот же угол лапки, что и при печати: иначе решение верное, а удар мимо
+      rot(prefix + 'Tarsus1', TARSUS);
+      base.updateMatrixWorld(true);
+      return tip.getWorldPosition(_v).distanceTo(_t);
+    };
+    // грубый проход по трём главным суставам
+    let a = [0, -0.24, 0.62, 0, 0], err = measure(a);
+    for (let yaw = -1.0; yaw <= 1.0001; yaw += 0.1) {
+      for (let f = -1.2; f <= 1.0001; f += 0.11) {
+        for (let b = -0.6; b <= 1.5001; b += 0.11) {
+          const cand = [yaw, f, b, 0, 0], e = measure(cand);
+          if (e < err) { err = e; a = cand; }
+        }
+      }
+    }
+    // покоординатное уточнение с уменьшающимся шагом: грубой сетки мало,
+    // шаг клавиш 0.16, а промах в 0.3 — это две клавиши мимо
+    for (let stepSize = 0.12; stepSize > 0.004; stepSize *= 0.55) {
+      let moved = true;
+      while (moved) {
+        moved = false;
+        for (let i = 0; i < 5; i++) {
+          for (const d of [stepSize, -stepSize]) {
+            const cand = a.slice();
+            cand[i] += d;
+            const e = measure(cand);
+            if (e < err - 1e-5) { err = e; a = cand; moved = true; }
+          }
+        }
+      }
+    }
+    // до крайних клавиш лапке не дотянуться — остаток добираем корпусом,
+    // как это делает живой человек за клавиатурой: не тянет палец, а подаётся телом
+    measure(a);
+    tip.getWorldPosition(_v);
+    const dx = _t.x - _v.x, dy = _t.y - _v.y;
+    const len = Math.hypot(dx, dy), cap = Math.min(len, 0.35);
+    const best = {
+      yaw: a[0], femur: a[1], tibia: a[2], roll: a[3], coxa: a[4], err,
+      shift: len > 1e-4 ? {x: dx / len * cap, y: dy / len * cap} : {x: 0, y: 0},
+    };
+    ikCache.set(tag, best);
+    return best;
+  }
+
+  /* какой лапке эта клавиша ближе — решает измеренная ошибка, а не сторона по y */
+  const sideCache = new Map();
+  function bestSide(key) {
+    const tag = key.userData.rus + key.position.y.toFixed(3);
+    if (sideCache.has(tag)) return sideCache.get(tag);
+    const l = legIK('LF', key), r = legIK('RF', key);
+    const pick = (!r || (l && l.err <= r.err)) ? 'L' : 'R';
+    sideCache.set(tag, pick);
+    return pick;
+  }
+
+  function homeBody() {
+    if (body && bodyHome) { body.position.x = bodyHome.x; body.position.y = bodyHome.y; }
+  }
+
   function rot(name, angle) {
     const n = nodes[name];
     if (!n) return;
@@ -261,6 +426,7 @@ window.FlyRig = (function () {
     resize,
     /* p: 0..1 — насколько глубоко муха задумалась */
     think(p, t) {
+      homeBody();
       const slip = p * 0.34;
       glasses.position.set(-slip * 0.35, 0, -slip);
       glasses.rotation.y = slip * 0.5;
@@ -268,10 +434,14 @@ window.FlyRig = (function () {
       frontLeg('L', 0.15 + 0.05 * Math.sin(t * 1.7), 0);
       frontLeg('R', 0.12, 0);
       spot.intensity = 0.4 + 1.6 * p;
-      keys.forEach(k => k.material.color.setHex(0x4e5a53));
+      for (const k of keys) {
+        k.position.z = k.userData.home;
+        k.material[4].color.setHex(0xffffff);
+      }
     },
     /* лапка поднимается к очкам и возвращает их на место */
     adjust(p) {
+      homeBody();
       const back = 1 - p;
       const k = Math.sin(p * Math.PI);
       glasses.position.set(-back * 0.12, 0, -back * 0.34);
@@ -281,28 +451,94 @@ window.FlyRig = (function () {
       rot('Head', -0.10 + k * 0.05);
       spot.intensity = 0.5;
     },
-    /* печать: лапки стучат, подсвечивается клавиша */
-    type(t, keyIndex) {
-      const a = Math.sin(t * 16), b = Math.sin(t * 16 + Math.PI);
-      frontLeg('L', 0.30 + a * 0.28, 0);
-      frontLeg('R', 0.30 + b * 0.28, 0);
+    /* Печать: ch — символ, который набирается прямо сейчас, u — 0..1 внутри удара.
+       Лапка идёт к той клавише, на которой этот символ написан, и вдавливает её. */
+    type(t, ch, u) {
       rot('Head', -0.16 + Math.sin(t * 8) * 0.015);
       glasses.position.set(0, 0, 0);
       glasses.rotation.y = 0;
       rot('LWing', Math.sin(t * 30) * 0.12);
       rot('RWing', -Math.sin(t * 30) * 0.12);
       spot.intensity = 0.25;
-      if (keys.length) {
-        keys.forEach(k => k.material.color.setHex(0x4e5a53));
-        const k = keys[Math.abs(keyIndex | 0) % keys.length];
-        k.material.color.setHex(0xffd200);
+      for (const k of keys) {
+        k.position.z = k.userData.home;
+        k.material[4].color.setHex(0xffffff);
+      }
+      const key = keyByChar.get(ch);
+      if (!key) {                       // символа нет на раскладке — не врём, лапки ждут
+        frontLeg('L', 0.20, 0); frontLeg('R', 0.20, 0);
+        homeBody();
+        return;
+      }
+      // рукой ближе к клавише: у передних лапок разный знак по y
+      // клавишу берёт та лапка, которая до неё реально дотягивается: знак координаты
+      // угадывает неверно для среднего ряда, а промах там был в целую клавишу
+      const side = bestSide(key);
+      const other = side === 'L' ? 'R' : 'L';
+      const leg = side + 'F';          // узлы скелета зовутся LFCoxa_yaw, LFFemur и т.д.
+      const pose = legIK(leg, key);
+      frontLeg(other, 0.20, 0);
+      if (!pose) return;
+      const uu = Math.max(0, Math.min(1, u));
+      // замах в первой половине удара, попадание во второй
+      const swing = uu < 0.5 ? uu * 2 : 1;
+      const hit = uu < 0.5 ? 0 : (uu - 0.5) * 2;
+      const rest = {yaw: 0, femur: -0.24, tibia: 0.62};
+      const mix = (a, b) => a + (b - a) * swing;
+      rot(leg + 'Coxa_yaw', mix(rest.yaw, pose.yaw));
+      // подъём только на замахе: к моменту касания он обязан быть нулём,
+      // иначе лапка систематически висит мимо клавиши
+      const lift = uu < 0.5 ? 0.18 * Math.sin(uu * Math.PI * 2) : 0;
+      rot(leg + 'Femur', mix(rest.femur, pose.femur) - lift);
+      rot(leg + 'Tibia', mix(rest.tibia, pose.tibia));
+      rot(leg + 'Coxa_roll', mix(0, pose.roll));
+      rot(leg + 'Coxa', mix(0, pose.coxa));
+      rot(leg + 'Tarsus1', TARSUS);
+      if (body && bodyHome) {
+        body.position.x = bodyHome.x + pose.shift.x * swing;
+        body.position.y = bodyHome.y + pose.shift.y * swing;
+      }
+      if (hit > 0) {
+        key.position.z = key.userData.home - 0.03 * Math.sin(hit * Math.PI);
+        key.material[4].color.setHex(0xffd200);
       }
     },
     idle(t) {
+      homeBody();
       frontLeg('L', 0.12 + Math.sin(t) * 0.03, 0);
       frontLeg('R', 0.12 + Math.cos(t) * 0.03, 0);
       rot('Head', -0.1);
       spot.intensity = 0.2;
+    },
+    /* какая клавиша отвечает за символ — для подписи на странице */
+    keyFor(ch) {
+      const k = keyByChar.get(ch);
+      return k ? {rus: k.userData.rus, lat: k.userData.lat} : null;
+    },
+    /* Проверка попадания: бьём по символу и меряем, где оказался кончик лапки
+       относительно центра клавиши. Нужно, чтобы «муха жмёт кнопку» было
+       утверждением с числом, а не обещанием. */
+    probe(ch) {
+      const key = keyByChar.get(ch);
+      if (!key) return {ch, found: false};
+      api.type(0, ch, 0.9);
+      scene.updateMatrixWorld(true);
+      const side = bestSide(key);
+      const tip = new THREE.Vector3(), kp = new THREE.Vector3();
+      nodes[side + 'FTarsus5'].getWorldPosition(tip);
+      key.getWorldPosition(kp);
+      return {
+        ch, found: true, label: key.userData.rus, lat: key.userData.lat, side,
+        dist: +tip.distanceTo(kp).toFixed(3),
+        ikErr: +((legIK(side + 'F', key) || {err: -1}).err).toFixed(3),
+        shift: (legIK(side + 'F', key) || {shift: null}).shift,
+        bodyOff: body && bodyHome
+          ? +Math.hypot(body.position.x - bodyHome.x, body.position.y - bodyHome.y).toFixed(3)
+          : null,
+        dxy: +Math.hypot(tip.x - kp.x, tip.y - kp.y).toFixed(3),
+        pressed: +(key.userData.home - key.position.z).toFixed(4),
+        keys: keys.length,
+      };
     },
     /* координаты опорных точек — чтобы проверять посадку, не гадая по картинке */
     debug() {
@@ -365,7 +601,7 @@ document.querySelectorAll('button').forEach(b => b.onclick = () => { mode = b.da
   p = Math.min(1, p + dt * 0.8);
   if (mode === 'think') FlyRig.think(p, t);
   else if (mode === 'adjust') FlyRig.adjust(p);
-  else if (mode === 'type') FlyRig.type(t, Math.floor(t * 8));
+  else if (mode === 'type') FlyRig.type(t, 'йцукен'[Math.floor(t * 4) % 6], (t * 4) % 1);
   else FlyRig.idle(t);
   FlyRig.render(dt);
   requestAnimationFrame(loop);

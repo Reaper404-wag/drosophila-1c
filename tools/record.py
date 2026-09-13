@@ -23,7 +23,7 @@ REPORT = ROOT / "report"
 DOCS = ROOT / "docs"
 PAGE = REPORT / "cap_timelapse.html"
 TITLE = "Муха и 1С"
-WIDTH, HEIGHT = 1440, 780
+WIDTH, HEIGHT = 1440, 840
 
 FOREGROUND = r"""
 Add-Type -AssemblyName System.Drawing

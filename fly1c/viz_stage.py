@@ -438,7 +438,8 @@ function loop(now) {
     } else if (phase === 'type') {
       const want = Math.floor(p * f.op.length);
       if (want !== typed) { typed = want; logLine(f, typed); }
-      FlyRig.type(t0, typed * 3);
+      // муха бьёт по клавише того символа, который сейчас появляется в логе
+      FlyRig.type(t0, f.op.charAt(Math.min(typed, f.op.length - 1)), p * f.op.length % 1);
       if (p >= 1) {
         phase = 'settle'; phaseT = 0;
         finishLine(f);
@@ -463,8 +464,16 @@ function loop(now) {
       const modes = {think: 'думает', adjust: 'поправляет очки',
                      type: 'печатает', settle: 'проверяет'};
       document.getElementById('mode').textContent = modes[phase];
-      document.getElementById('modehint').textContent =
-        phase === 'think' ? ' — грибовидное тело выбирает операцию' : '';
+      let hint = '';
+      if (phase === 'think') hint = ' — грибовидное тело выбирает операцию';
+      else if (phase === 'type') {
+        // показываем символ и клавишу под ним: видно, что лапка бьёт именно туда
+        const ch = f.op.charAt(Math.min(typed, f.op.length - 1));
+        const key = FlyRig.keyFor(ch);
+        hint = key ? ' — клавиша «' + (key.rus || 'пробел').toUpperCase() + '»'
+                   : ' — символа «' + ch + '» на раскладке нет';
+      }
+      document.getElementById('modehint').textContent = hint;
     }
     document.getElementById('clock').textContent = t0.toFixed(2).padStart(5, '0');
   }
