@@ -179,7 +179,9 @@ window.FlyRig = (function () {
     glasses = buildGlasses();
     (nodes['Head'] || fly).add(glasses);
 
-    renderer = new THREE.WebGLRenderer({antialias: true, alpha: false});
+    // preserveDrawingBuffer нужен, чтобы кадр можно было сохранить или снять со страницы
+    renderer = new THREE.WebGLRenderer({antialias: true, alpha: false,
+                                        preserveDrawingBuffer: true});
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     // без sRGB и тонмаппинга картинка выглядит выцветшей
     renderer.outputEncoding = THREE.sRGBEncoding;
