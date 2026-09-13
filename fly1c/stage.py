@@ -15,6 +15,7 @@ import numpy as np
 from .brain import get_brain
 from .curriculum import BY_ID, LABS, TRACKS
 from . import trace
+from .policy import TRAIN_IDS, train_policy
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -34,11 +35,14 @@ def pack_bits(indices: list[int], n: int) -> str:
 
 def collect(episodes: int = 25, lab_ids: list[str] | None = None) -> dict[str, Any]:
     brain = get_brain()
+    # одна обученная муха на все лабораторные: та же, которой меряют качество
+    fly = train_policy()
     idx, x, y, kindv = trace._neuron_sample(brain, kc_n=900, bg=1500)
     n = int(idx.size)
     labs: list[dict[str, Any]] = []
     for lab_id in lab_ids or [lab["id"] for lab in LABS]:
-        data = trace.record(lab_id, episodes=episodes, sample=(idx, x, y, kindv))
+        data = trace.record(lab_id, episodes=episodes, sample=(idx, x, y, kindv),
+                            policy_fly=fly)
         frames = []
         for f in data["frames"]:
             frames.append(
@@ -65,6 +69,7 @@ def collect(episodes: int = 25, lab_ids: list[str] | None = None) -> dict[str, A
                 "solved_at": data["solved_at"],
                 "frames": frames,
                 "ops": len(BY_ID[lab_id]["ops"]),
+                "inTraining": lab_id in TRAIN_IDS,
             }
         )
     return {

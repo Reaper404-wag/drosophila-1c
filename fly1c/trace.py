@@ -12,9 +12,9 @@ from .agent import OracleAgent
 from .brain import get_brain
 from .checker import run_checks
 from .curriculum import BY_ID, TRACKS
-from .fly_agent import ConnectomeAgent, full_op_key
-from .ir import OpError, World
-from .ops import apply_op
+from .ir import World
+
+from .policy import train_policy
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -207,11 +207,18 @@ def _neuron_sample(brain, kc_n: int = 1500, bg: int = 2500, seed: int = 3):
     return idx, x, y, kindv
 
 
-def record(lab_id: str, episodes: int = 25, sample=None) -> dict[str, Any]:
-    """Муха учится, потом идёт по лабе жадно — этот проход и пишется по шагам."""
+def record(lab_id: str, episodes: int = 25, sample=None,
+           policy_fly=None) -> dict[str, Any]:
+    """Пишем НАСТОЯЩИЙ прогон решателя по шагам — то, что видно на сцене.
+
+    Раньше здесь переигрывались эталонные операции методички, и муха выбирала лишь
+    их порядок: промахнуться было негде, пространство состояло из одних правильных
+    ходов. Теперь на сцену идёт та же политика и то же пространство ходов, на которых
+    меряется качество в tools/train_fly.py, — с ловушками и ценой ошибки. Что муха
+    выбрала, то и нарисовано, включая неудачные ходы.
+    """
     lab = BY_ID[lab_id]
     brain = get_brain()
-    agent = ConnectomeAgent()
 
     # лаба продолжает конфигурацию предыдущих — доводим мир до её начала
     base = World()
@@ -219,69 +226,44 @@ def record(lab_id: str, episodes: int = 25, sample=None) -> dict[str, Any]:
         if prev == lab_id:
             break
         OracleAgent().run(base, BY_ID[prev])
-    learned = agent.run(deepcopy(base), lab, episodes=episodes)
+
+    fly = policy_fly if policy_fly is not None else train_policy()
 
     idx, x, y, kindv = sample if sample is not None else _neuron_sample(brain)
-
-    w = deepcopy(base)
-    gold = lab["ops"]
-    remaining = list(range(len(gold)))
-    # кандидаты перемешиваются на каждом шаге: иначе argmax при равных оценках берёт
-    # первую оставшуюся операцию, а это и есть порядок методички — политика бы не проверялась
-    shuffler = np.random.default_rng(17)
     frames: list[dict[str, Any]] = []
-    last = ""
-    guard = 0
-    while remaining and guard < len(gold) * 4:
-        guard += 1
-        mask = [1 if ok else 0 for ok, _ in run_checks(w, lab["checks"])]
-        key = "".join(map(str, mask)) + "|" + last
+
+    def on_step(op, failed, world, mask):
+        # коннектом считается на состоянии задачи — это и есть панель активности
+        key = "".join(map(str, mask)) + "|" + ("fail:" if failed else "") + op["op"]
         counts = brain.simulate(brain.odor(key))
         kc = brain.kc_response(key)
-        keys = [full_op_key(gold[i], i) for i in remaining]
-        order = shuffler.permutation(len(remaining))
-        scores = [float(agent._w(keys[i]) @ kc) for i in order]
-        choice = int(order[int(np.argmax(scores))])
-        chosen = remaining[choice]
-        before = sum(mask)
-        try:
-            apply_op(w, gold[chosen])
-            remaining.pop(choice)
-            failed = False
-            last = keys[choice]
-        except OpError:
-            failed = True
-            last = "fail:" + keys[choice]
-        # дофамин работает и на проходе: промах тут же ослабляет свой синапс
-        after_mask = [1 if ok else 0 for ok, _ in run_checks(w, lab["checks"])]
-        reward = -0.4 if failed else (sum(after_mask) - before) + 0.05
-        active = kc > 0
-        agent._w(keys[choice])[active] += agent.lr * reward * kc[active]
-
-        event = one_c_event(gold[chosen])
-        ui = ui_payload(gold[chosen], w) if not failed else {"kind": "fail"}
         act = counts[idx]
-        frames.append(
-            {
-                "op": event["line"],
-                "section": event["section"],
-                "obj": event["obj"],
-                "detail": event["detail"],
-                "ui": ui,
-                "failed": failed,
-                "mask": after_mask,
-                "fire": [int(i) for i in np.flatnonzero(act > 0)],
-                "spikes": int(counts.sum()),
-                "kc": int((kc > 0).sum()),
-            }
-        )
+        event = one_c_event(op)
+        frames.append({
+            "op": event["line"],
+            "section": event["section"],
+            "obj": event["obj"],
+            "detail": event["detail"],
+            "ui": ui_payload(op, world) if not failed else {"kind": "fail"},
+            "failed": failed,
+            "mask": mask,
+            "fire": [int(i) for i in np.flatnonzero(act > 0)],
+            "spikes": int(counts.sum()),
+            "kc": int((kc > 0).sum()),
+        })
+
+    result = fly.solve(lab, base, greedy=True, learn=False, on_step=on_step)
+    w = result["world"]
 
     return {
         "lab": lab_id,
         "track": lab["track"],
         "title": lab["title"],
         "checks": [msg for _, msg in run_checks(w, lab["checks"])],
-        "solved_at": learned.get("solved_at"),
+        "solved_at": None,
+        "passed": result["passed"],
+        "junk": result["junk"],
+        "fails": result["fails"],
         "brain": brain.summary(),
         "sections": SECTIONS,
         "neurons": {

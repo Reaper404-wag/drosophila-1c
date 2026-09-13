@@ -147,7 +147,7 @@ font:11.5px "Cascadia Mono",Consolas,monospace;color:#2b2b2b}
           <span>проверок: <b id="passed">0</b>/<b id="total">0</b></span>
           <span>операций: <b id="opsdone">0</b>/<b id="opstotal">0</b></span>
           <span>промахов: <b id="fails">0</b></span>
-          <span>обучилась за: <b id="solved">—</b> эпизодов</span>
+          <span>училась на: <b id="solved">—</b></span>
         </div>
         <div class="hint" id="hint"></div>
       </div>
@@ -397,7 +397,9 @@ function pick(i) {
   document.getElementById('crumb').textContent = lab.trackTitle;
   document.getElementById('opstotal').textContent = lab.frames.length;
   document.getElementById('total').textContent = lab.checks.length;
-  document.getElementById('solved').textContent = lab.solved_at ?? '—';
+  // политика одна на все лабы: 6 эпох по семи обучающим, эта могла в них не входить
+  document.getElementById('solved').textContent =
+    (lab.inTraining ? '7 обучающих лаб, 6 эпох' : '7 обучающих лаб (эту не видела)');
   const checks = document.getElementById('checks');
   checks.innerHTML = '';
   lab.checks.forEach(m => {
@@ -405,7 +407,8 @@ function pick(i) {
   });
   msgBoxes().forEach(b => b.innerHTML = '');
   document.getElementById('hint').innerHTML =
-    'Посмотреть эту лабу в живой 1С — собрать её ИБ и открыть окном:<br>'
+    'Собрать эту лабу в живой 1С и открыть окном (в ИБ ложится <b>эталонное</b> '
+    + 'решение методички, а на экране выше — то, что выбрала муха):<br>'
     + `<code>python run_lab.py build ${lab.id}</code> `
     + `<code>python run_lab.py seed ${lab.id}</code> `
     + `<code>python run_lab.py open ${lab.id}</code><br>`

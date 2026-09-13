@@ -29,7 +29,6 @@ from fly1c.policy import GeneralFly  # noqa: E402
 TRAIN = ["00_uchebnaya", "10_ms_lab1", "11_ms_lab2", "12_ms_lab3",
          "20_ds_lab1", "21_ds_lab2", "22_ds_lab3"]
 TEST = ["13_ms_lab4", "14_ms_lab5", "23_ds_lab4", "24_ds_lab5", "25_ds_lab6"]
-WEIGHTS = ROOT / "assets" / "fly_policy.npz"
 
 
 def start_world(lab_id: str) -> World:
@@ -106,9 +105,11 @@ def main() -> int:
         print("\nпроверочные лабы (не видела):")
         print("\n".join(te_lines))
         print(f"    итого {te_ok}/{te_tot}")
-        WEIGHTS.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(WEIGHTS, w=fly.w)
-        print(f"\nвеса сохранены: {WEIGHTS}")
+        # веса намеренно не сохраняются: они co-адаптированы с генератором,
+        # который разбивает ничьи, и под чужим генератором заметно слабее.
+        # Обучение занимает пару секунд — сцена и аудит учат муху на месте.
+        print()
+        print("сводная таблица по вариантам: python tools/audit.py")
         return 0
 
     # абляция: то же обучение на испорченном мозге

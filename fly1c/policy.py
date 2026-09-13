@@ -282,12 +282,19 @@ class GeneralFly:
 
     # --- один проход по лабораторной ----------------------------------
     def solve(self, lab: dict[str, Any], base: World, greedy: bool = False,
-              max_steps: int | None = None, learn: bool = True) -> dict[str, Any]:
+              max_steps: int | None = None, learn: bool = True,
+              on_step=None) -> dict[str, Any]:
+        """on_step(op, failed, world, mask) вызывается после каждого хода.
+
+        Нужен, чтобы визуализация показывала этот самый прогон, а не отдельную
+        постановку рядом: рисуется ровно то, что решатель сделал, промахи включительно.
+        """
         world = deepcopy(base)
         checks = lab["checks"]
         limit = max_steps or 60
         done: set[str] = set()
         failed_here: set[str] = set()
+        failed_sig: dict[str, tuple] = {}   # ход -> состояние, в котором он не вышел
         last_failed = False
         fails = 0
         steps = 0
@@ -302,8 +309,13 @@ class GeneralFly:
                 break
             unmet_ids = {id(ch) for (ok, _), ch in zip(results, checks) if not ok}
             progress = passed / max(1, len(checks))
-            # удавшийся ход повторять незачем — он уже сделан
-            acts = [op for op in candidates(world, checks) if _op_key(op) not in done]
+            # Удавшийся ход повторять незачем — он уже сделан. Провалившийся тоже
+            # незачем, пока мир не изменился: раньше муха могла пять раз подряд
+            # ломиться в один и тот же ход и просто жечь бюджет шагов.
+            sig = tuple(1 if ok else 0 for ok, _ in results)
+            acts = [op for op in candidates(world, checks)
+                    if _op_key(op) not in done
+                    and failed_sig.get(_op_key(op)) != sig]
             if not acts:
                 break
             codes = [self.code(tokens(world, op, checks, unmet_ids, progress,
@@ -325,6 +337,7 @@ class GeneralFly:
                 failed = True
                 fails += 1
                 failed_here.add(key)
+                failed_sig[key] = sig
             after = sum(1 for ok, _ in run_checks(world, checks) if ok)
             trash_after = len(junk(world, checks, base_junk))
             # цена ошибки: лишний объект в конфигурации бьёт по награде так же,
@@ -337,6 +350,9 @@ class GeneralFly:
                 self.w[active] += self.lr * reward * codes[idx][active]
             stall = 0 if after > before else stall + 1
             last_failed = failed
+            if on_step is not None:
+                on_step(op, failed, world,
+                        [1 if ok else 0 for ok, _ in run_checks(world, checks)])
         from .score import score as final_score
 
         marks = final_score(world, checks, base_junk)
@@ -356,3 +372,54 @@ def _op_key(op: dict[str, Any]) -> str:
     import json
 
     return json.dumps(op, ensure_ascii=False, sort_keys=True)
+
+
+# --- общее обучение --------------------------------------------------------
+# Раньше процедура обучения была скопирована в трёх местах (инструмент обучения,
+# аудит, запись сцены), и они разошлись: сцена грузила сохранённый файл весов и
+# показывала 5 проверок из 16 там, где замер давал 13. Теперь точка одна.
+
+TRAIN_IDS = ["00_uchebnaya", "10_ms_lab1", "11_ms_lab2", "12_ms_lab3",
+             "20_ds_lab1", "21_ds_lab2", "22_ds_lab3"]
+TEST_IDS = ["13_ms_lab4", "14_ms_lab5", "23_ds_lab4", "24_ds_lab5", "25_ds_lab6"]
+
+
+def start_world(lab_id: str) -> World:
+    """Мир на начало лабы: предыдущие лабы той же линейки уже сделаны."""
+    from .agent import OracleAgent
+    from .curriculum import BY_ID, TRACKS
+
+    lab = BY_ID[lab_id]
+    base = World()
+    for prev in TRACKS[lab["track"]]:
+        if prev == lab_id:
+            break
+        OracleAgent().run(base, BY_ID[prev])
+    return base
+
+
+def train_policy(mode: str = "features", seed: int = 11, epochs: int = 6,
+                 lab_ids: list[str] | None = None, on_epoch=None) -> GeneralFly:
+    """Учим и оставляем лучшие веса: политика гуляет, последняя эпоха не лучшая.
+
+    Веса co-адаптированы с разбором ничьих: у многих ходов оценки равны, и выбор
+    между ними делает тот же генератор. Поэтому обучение и прогон должны жить в
+    одном объекте — сохранённый файл весов под чужим генератором заметно слабее.
+    """
+    from .curriculum import BY_ID
+
+    ids = lab_ids or TRAIN_IDS
+    fly = GeneralFly(seed=seed, mode=mode)
+    best_w, best = fly.w.copy(), -1
+    for epoch in range(1, epochs + 1):
+        for lab_id in ids:
+            fly.solve(BY_ID[lab_id], start_world(lab_id))
+        fly.epsilon = max(0.05, fly.epsilon * 0.88)
+        got = sum(fly.solve(BY_ID[i], start_world(i), greedy=True, learn=False)["passed"]
+                  for i in ids)
+        if got > best:
+            best, best_w = got, fly.w.copy()
+        if on_epoch is not None:
+            on_epoch(epoch, got)
+    fly.w = best_w
+    return fly
