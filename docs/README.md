@@ -10,6 +10,7 @@
 | `fly.png` | муха в студийном свете | `python tools/screenshot.py cinema` |
 | `home.png` | стартовая страница | `python tools/screenshot.py home` |
 | `timelapse.mp4` | таймлапс работы мухи | см. ниже |
+| `timelapse.gif` | он же для README | собирается из mp4, см. ниже |
 
 Важно: сцена перед съёмкой должна быть пересобрана — `python run_lab.py stage`.
 Она заново учит муху и записывает настоящий прогон, поэтому числа на кадрах меняются
@@ -42,6 +43,23 @@ python tools/record.py 20_ds_lab1 26   REM другая лаба и другая
 
 Руками то же самое: открыть `report/stage.html`, выбрать лабу и скорость ×4, снять окно
 через Win+G или OBS.
+
+### GIF для README
+
+GitHub **не проигрывает** mp4, на который сослались путём из репозитория: файл лежит,
+но на странице видна только ссылка. Поэтому в README вставлен GIF — его GitHub
+показывает и крутит сам. Собирается из готового mp4 в два прохода (палитра, потом
+кадры), иначе получается грязь и лишние мегабайты:
+
+```bat
+ffmpeg -y -i docs/timelapse.mp4 -vf "fps=9,scale=680:-1:flags=lanczos,palettegen=max_colors=128" pal.png
+ffmpeg -y -i docs/timelapse.mp4 -i pal.png -lavfi "fps=9,scale=680:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3" -loop 0 docs/timelapse.gif
+```
+
+Выходит около 3 МБ при 680 пикселях и 9 кадрах в секунду — текст в окне 1С ещё читается.
+Если нужен ролик со звуком и в полном качестве прямо на странице GitHub, его надо
+загрузить через веб-интерфейс: перетащить mp4 в описание release или в issue, GitHub
+выдаст ссылку вида `user-attachments/assets/...`, и вот она уже проигрывается.
 
 ## Как проверить, что муха жмёт нужную клавишу
 
