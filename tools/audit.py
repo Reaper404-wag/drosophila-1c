@@ -84,6 +84,26 @@ def random_run(lab: dict, base: World, seed: int) -> dict:
             "junk": len(junk(world, checks, base_junk))}
 
 
+def untrained_solver(seed: int):
+    """Честный базис: ТОТ ЖЕ цикл решения, но веса нулевые.
+
+    Все оценки ходов равны, значит выбор каждый раз падает на случайный из
+    допустимых. Это и есть контроль, с которым надо сравнивать обучение: он
+    отличается от обученной политики ровно одним — политикой.
+
+    Прежний базис (`random_run` ниже) был другим циклом: без отсева уже
+    сделанных и уже провалившихся ходов, без предела топтания. Он давал 82.8 и
+    делал обучение красивее, чем оно есть. Такой базис сравнивает не политики,
+    а обвязку среды.
+    """
+    fly = GeneralFly(seed=seed)
+
+    def run(lab, base, _seed):
+        res = fly.solve(lab, base, greedy=True, learn=False)
+        return {"passed": res["passed"], "checks": res["checks"], "junk": res["junk"]}
+    return run
+
+
 def train(mode: str, seed: int, epochs: int = 6) -> GeneralFly:
     fly = GeneralFly(seed=seed, mode=mode)
     best_w, best = fly.w.copy(), -1
@@ -145,15 +165,19 @@ def main() -> int:
     args = ap.parse_args()
 
     variants = [
-        ("случайный выбор из тех же ходов", lambda: (lambda seed: (
-            lambda lab, base, s: random_run(lab, base, s * 97 + seed)))),
+        ("тот же цикл, выбор наугад", lambda: untrained_solver),
         ("обучение на признаках", lambda: policy_solver("features", None)),
     ]
     if not args.quick:
         variants += [
+            ("для сравнения: более слабый цикл наугад", lambda: (lambda seed: (
+                lambda lab, base, s: random_run(lab, base, s * 97 + seed)))),
+            ("нисходящие нейроны (канон. схема)", lambda: policy_solver("descending", None)),
+            ("нисходящие, связи перемешаны", lambda: policy_solver("descending", "shuffled")),
+            ("нисходящие, связи обнулены", lambda: policy_solver("descending", "zeroed")),
             ("код грибовидного тела (коннектом)", lambda: policy_solver("connectome", None)),
-            ("то же, связи перемешаны", lambda: policy_solver("connectome", "shuffled")),
-            ("то же, связи обнулены", lambda: policy_solver("connectome", "zeroed")),
+            ("грибовидное, связи перемешаны", lambda: policy_solver("connectome", "shuffled")),
+            ("грибовидное, связи обнулены", lambda: policy_solver("connectome", "zeroed")),
         ]
 
     print(f"зёрен на вариант: {args.seeds}; лабораторных: {len(ALL)}\n", flush=True)

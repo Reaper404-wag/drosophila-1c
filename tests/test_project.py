@@ -51,6 +51,42 @@ def test_brain_is_the_real_connectome():
     assert b.W.nnz > 1_000_000
 
 
+@needs_data
+def test_escape_circuit_fires():
+    """Канонический тест коннектома: looming слева -> гигантское волокно слева.
+
+    Стимулируем детекторы приближающегося объекта (LC4, LPLC2) с одной стороны
+    головы — разрядиться должно DNp01 той же стороны, это команда прыжка. Цепь
+    заранее не закладывалась: веса берутся из карты синапсов, знак — из медиатора
+    нейрона. Если тест упал, сломана калибровка усиления, и всё остальное в
+    проекте считает шум.
+    """
+    import sys as _sys
+
+    _sys.path.insert(0, str(ROOT / "tools"))
+    from calibrate import passes, probe
+
+    from fly1c.brain import get_brain
+
+    result = probe(get_brain())
+    assert result["weight_ipsi"] > 0, "связь LC4/LPLC2 -> DNp01 вышла тормозной"
+    assert passes(result), result
+
+
+@needs_data
+def test_named_cells_resolve():
+    """Именованные типы клеток должны находиться: без них нет ни входа, ни выхода."""
+    from fly1c import cells
+    from fly1c.brain import get_brain
+
+    brain = get_brain()
+    census = cells.census(brain)
+    assert census["DNp01"] == 2, census          # гигантское волокно, по одному на сторону
+    assert census["LC4"] > 50, census
+    assert census["PAM"] > 100, census
+    assert cells.find(brain, "DNp01", "left").size == 1
+
+
 def test_methodics_parses_types():
     """«Строка, длина -20» должно превращаться в String(20), а ссылка — в CatalogRef."""
     from fly1c.methodics import parse_type
@@ -87,41 +123,28 @@ def test_junk_is_punished():
 
 
 @needs_data
-def test_training_beats_random():
-    """Главное утверждение README: обучение сильнее случайного выбора.
+def test_policy_is_not_worse_than_chance():
+    """Честное сравнение политики с выбором наугад — в ОДНОМ И ТОМ ЖЕ цикле.
 
-    Берём одну лабу и сравниваем обученную политику со случайным выбором из того
-    же пространства ходов. Порог мягкий: тест про направление, а не про рекорд.
+    Раньше здесь стояло «обучение обгоняет случайный выбор», и случайный выбор
+    брался из другого, более слабого цикла: без отсева сделанных и провалившихся
+    ходов, без предела топтания. Так сравнивалась обвязка среды, а не политики.
+    Замер на равных показывает, что обучение не даёт выигрыша (103,2 против
+    103,4 на пяти зёрнах), поэтому и проверяется теперь только то, что оно не
+    делает хуже. Подробности в README, раздел «Раздел, где мы сами себя
+    разоблачаем».
     """
-    import random
-
-    from fly1c.actions import candidates
-    from fly1c.checker import run_checks
     from fly1c.curriculum import BY_ID
-    from fly1c.ir import OpError
-    from fly1c.ops import apply_op
-    from fly1c.policy import start_world, train_policy
+    from fly1c.policy import GeneralFly, start_world, train_policy
 
     lab_id = "10_ms_lab1"
     lab = BY_ID[lab_id]
 
-    rng = random.Random(0)
-    world = start_world(lab_id)
-    for _ in range(40):
-        if all(ok for ok, _ in run_checks(world, lab["checks"])):
-            break
-        acts = candidates(world, lab["checks"])
-        if not acts:
-            break
-        try:
-            apply_op(world, rng.choice(acts))
-        except OpError:
-            pass
-    blind = sum(1 for ok, _ in run_checks(world, lab["checks"]) if ok)
-
-    fly = train_policy(epochs=3)
-    taught = fly.solve(lab, start_world(lab_id), greedy=True, learn=False)["passed"]
-    assert taught > blind, f"обучение {taught}, случайный выбор {blind}"
+    chance = GeneralFly(seed=11)          # нулевые веса: все ходы равны, выбор наугад
+    blind = chance.solve(lab, start_world(lab_id), greedy=True, learn=False)["passed"]
+    taught = train_policy(epochs=3).solve(
+        lab, start_world(lab_id), greedy=True, learn=False)["passed"]
+    assert taught >= blind - 2, f"обучение {taught}, наугад {blind}"
 
 
 def test_xml_dump_is_valid_xml():

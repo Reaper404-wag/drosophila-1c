@@ -45,13 +45,31 @@ def _class_index() -> dict[str, list[int]]:
     return by_class
 
 
+def _neuron_nt() -> dict[int, str]:
+    """Медиатор нейрона, а не отдельного синапса.
+
+    Посинапсовые предсказания шумные: у холинергического LC4 больше половины
+    синапсов размечены глутаматом, и знак связи выходил обратным. По закону
+    Дейла медиатор у нейрона один — берём сводное предсказание FlyWire.
+    """
+    out: dict[int, str] = {}
+    with gzip.open(DATA / "neurons.csv.gz", "rt", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            value = (row.get("nt_type") or "").strip()
+            if value:
+                out[int(row["root_id"])] = value
+    return out
+
+
 def _all_connections() -> list[tuple[int, int, int, str]]:
     out = []
     with gzip.open(DATA / "connections.csv.gz", "rt", encoding="utf-8") as fh:
         reader = csv.reader(fh)
         next(reader)
+        nt = _neuron_nt()
         for row in reader:
-            out.append((int(row[0]), int(row[1]), int(row[3]), row[4]))
+            pre = int(row[0])
+            out.append((pre, int(row[1]), int(row[3]), nt.get(pre, row[4])))
     return out
 
 

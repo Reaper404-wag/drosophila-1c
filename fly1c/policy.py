@@ -187,8 +187,14 @@ class GeneralFly:
 
     def __init__(self, seed: int = 11, epsilon: float = 0.25, lr: float = 0.02,
                  sparsity: float = 0.05, n_orn: int = 90, mode: str = "features"):
-        """mode: 'features' — признаки и их пары напрямую (работает),
-        'connectome' — код грибовидного тела (замерено: хуже случайного выбора)."""
+        """Чем описывается ход при выборе.
+
+        'features'    — признаки и их пары напрямую;
+        'connectome'  — разреженный код грибовидного тела;
+        'descending'  — спайки нисходящих нейронов, то есть выход мозга там,
+                        где его читают канонические проекты на коннектоме.
+        Что из этого работает — замерено в tools/audit.py, а не заявлено.
+        """
         self.brain = get_brain()
         self.rng = random.Random(seed)
         self.epsilon = epsilon
@@ -197,11 +203,12 @@ class GeneralFly:
         self.mode = mode
         self.n_feat = 8192
         self.index: dict[str, int] = {}
-        self.w = np.zeros(self.n_kc if mode == "connectome" else self.n_feat,
-                          dtype=np.float32)
+        size = {"connectome": self.n_kc,
+                "descending": int(self.brain.pop.descending.size)}.get(mode, self.n_feat)
+        self.w = np.zeros(size, dtype=np.float32)
         self.sparsity = sparsity   # доля клеток Кеньона, которым позволено гореть
         self.n_orn = n_orn         # сколько рецепторов включает один признак
-        self.orn = self.brain.pop.olfactory
+        self.orn = self.brain.pop.projection
         self._odor_cache: dict[str, np.ndarray] = {}
 
     # --- запах из признаков -------------------------------------------
@@ -259,9 +266,32 @@ class GeneralFly:
         return v
 
     def code(self, toks: list[str]) -> np.ndarray:
-        if self.mode != "connectome":
-            return self._feature_code(toks)
-        return self._kc_code(toks)
+        if self.mode == "connectome":
+            return self._kc_code(toks)
+        if self.mode == "descending":
+            return self._dn_code(toks)
+        return self._feature_code(toks)
+
+    def _dn_code(self, toks: list[str]) -> np.ndarray:
+        """Выход мозга там, где его читают канонические проекты, — на нисходящих.
+
+        Схема из разбора таких проектов: стимулируешь именованные сенсорные
+        клетки, гоняешь LIF по настоящему графу, читаешь **нисходящие**
+        (descending) нейроны — те самые, что в живой мухе командуют телом:
+        DNp01 — прыжок, DNa02 — поворот, MDN — назад. Внутри мозга ничего не
+        учится, веса — это число синапсов из электронной микроскопии. Учится
+        только маленький декодер поверх 1305 нисходящих выходов.
+        """
+        key = f"дн{self.n_orn}|" + "|".join(sorted(toks))
+        cached = self.brain._cache.get(key)
+        if cached is not None:
+            return cached
+        counts = self.brain.simulate(self._odor(toks))
+        dn = counts[self.brain.pop.descending]
+        peak = dn.max()
+        out = (dn / peak) if peak > 0 else dn
+        self.brain._cache[key] = out.astype(np.float32)
+        return self.brain._cache[key]
 
     def _kc_code(self, toks: list[str]) -> np.ndarray:
         """Ответ грибовидного тела на этот стимул (через настоящий коннектом)."""

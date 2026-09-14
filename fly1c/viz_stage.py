@@ -166,6 +166,10 @@ font:11.5px "Cascadia Mono",Consolas,monospace;color:#2b2b2b}
         <span><i style="background:#ff6b5e"></i>дофаминовые</span>
         <span style="margin-left:auto">спайков: <b id="spk">—</b> · KC: <b id="kcn">—</b></span>
       </div>
+      <div class="mode" style="border-top:0;padding-top:0">
+        вход — проекционные нейроны антеннальной доли, выход — нисходящие (DNp01, DNa02, MDN);
+        калибровка проверена тестом побега: <code>python tools/calibrate.py</code>
+      </div>
     </div>
     <div class="panel">
       <div class="ph">Муха за клавиатурой <span class="r">NeuroMechFly</span></div>

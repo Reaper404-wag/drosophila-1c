@@ -19,7 +19,7 @@ from scipy import sparse
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "connectome"
-CACHE = DATA / "flywire783.npz"
+CACHE = DATA / "flywire783_nt2.npz"   # nt2: знак по медиатору нейрона, не синапса
 
 # Знак синапса по нейромедиатору: ацетилхолин возбуждает, ГАМК и глутамат тормозят
 # (у мухи глутамат в основном на GluCl-каналах), моноамины — слабая модуляция.
@@ -48,11 +48,32 @@ def _read_classification() -> tuple[dict[int, int], list[str], list[str]]:
     return index, classes, supers
 
 
+def _read_neuron_nt() -> dict[int, str]:
+    """root_id -> медиатор нейрона (сводное предсказание FlyWire).
+
+    Знак связи надо брать отсюда, а не из предсказания на каждом синапсе.
+    По закону Дейла нейрон выделяет один и тот же медиатор во всех своих
+    синапсах, а посинапсовые предсказания шумные: у LC4 (заведомо
+    холинергический, возбуждающий) больше половины синапсов размечены как
+    GLUT, и с посинапсовым знаком его выход к DNp01 получался тормозным.
+    То есть канонический тест «looming -> гигантское волокно» не мог пройти
+    в принципе.
+    """
+    nt: dict[int, str] = {}
+    with gzip.open(DATA / "neurons.csv.gz", "rt", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            value = (row.get("nt_type") or "").strip()
+            if value:
+                nt[int(row["root_id"])] = value
+    return nt
+
+
 def build_cache(force: bool = False) -> Path:
     """Разобрать csv.gz в npz: индексы рёбер, веса со знаком, популяции нейронов."""
     if CACHE.exists() and not force:
         return CACHE
     index, classes, supers = _read_classification()
+    neuron_nt = _read_neuron_nt()
     pre_l: list[int] = []
     post_l: list[int] = []
     w_l: list[float] = []
@@ -66,7 +87,11 @@ def build_cache(force: bool = False) -> Path:
                 continue
             pre_l.append(a)
             post_l.append(b)
-            w_l.append(int(row[3]) * NT_SIGN.get(row[4], 0.3))
+            # медиатор пресинаптического нейрона; посинапсовый — только запасной
+            sign = NT_SIGN.get(neuron_nt.get(int(row[0]), ""), None)
+            if sign is None:
+                sign = NT_SIGN.get(row[4], 0.3)
+            w_l.append(int(row[3]) * sign)
     cls = np.array(classes)
     sup = np.array(supers)
     np.savez_compressed(
@@ -84,6 +109,7 @@ def build_cache(force: bool = False) -> Path:
 @dataclass
 class Populations:
     olfactory: np.ndarray
+    projection: np.ndarray
     kenyon: np.ndarray
     mbon: np.ndarray
     dan: np.ndarray
@@ -93,18 +119,44 @@ class Populations:
 class FlyBrain:
     """LIF-симуляция полного коннектома. Один шаг ≈ один миллисекундный такт."""
 
-    def __init__(self, leak: float = 0.82, theta: float = 1.0, scale: float = 0.01):
+    def __init__(self, leak: float = 0.82, theta: float = 1.0, gain: float = 5.0,
+                 refractory: int = 4):
+        """gain и refractory подобраны каноническим тестом, а не на глаз.
+
+        Вход каждого нейрона нормирован: сумма модулей его входных весов равна
+        единице, а сила связей задаётся одним общим gain. Без нормировки одно
+        глобальное усиление не годится сразу на два конца мозга: при значении,
+        на котором работает цепь побега, клеткам Кеньона приходило максимум 0.66
+        при пороге 1.0 — то есть грибовидное тело не могло разрядиться в
+        принципе, а при значении для грибовидного тела захлёбывался весь мозг.
+
+        При gain=5 и рефрактерности 4 такта проходит канонический тест
+        (LC4+LPLC2 слева -> DNp01 слева, 6 спайков против 0 на чужой стороне),
+        клетки Кеньона отвечают, а активность остаётся разреженной — около 700
+        спайков на 139 тысяч нейронов за 20 тактов. Проверяется командой
+        python tools/calibrate.py.
+        """
         build_cache()
         z = np.load(CACHE, allow_pickle=False)
         self.n = int(z["n"])
-        w = z["weight"].astype(np.float32) * scale
+        w = z["weight"].astype(np.float32)
         # W[j, i] — вклад пресинаптического i в постсинаптический j
-        self.W = sparse.csr_matrix(
+        W = sparse.csr_matrix(
             (w, (z["post"], z["pre"])), shape=(self.n, self.n), dtype=np.float32
         )
+        # нормировка по входу: у каждого нейрона суммарный модуль входа = 1,
+        # дальше силу задаёт общий gain (см. объяснение в docstring)
+        totals = np.asarray(abs(W).sum(axis=1)).ravel()
+        totals[totals == 0] = 1.0
+        self.W = (sparse.diags((gain / totals).astype(np.float32)) @ W).tocsr()
+        self.gain = gain
         cls, sup = z["cls"], z["sup"]
         self.pop = Populations(
             olfactory=np.flatnonzero(cls == "olfactory").astype(np.int32),
+            # проекционные нейроны антеннальной доли: именно они идут в грибовидное
+            # тело. Стимулировать рецепторы бесполезно — до клеток Кеньона два
+            # синапса, и сигнал туда не доходит: 6 клеток против 1203 при стимуле PN
+            projection=np.flatnonzero(cls == "ALPN").astype(np.int32),
             kenyon=np.flatnonzero(cls == "Kenyon_Cell").astype(np.int32),
             mbon=np.flatnonzero(cls == "MBON").astype(np.int32),
             dan=np.flatnonzero(cls == "DAN").astype(np.int32),
@@ -112,12 +164,35 @@ class FlyBrain:
         )
         self.leak = leak
         self.theta = theta
+        self.refractory = int(refractory)
         self._cache: dict[str, np.ndarray] = {}
+        self._ids: np.ndarray | None = None
+
+    def body_ids(self) -> np.ndarray:
+        """FlyWire root_id каждого нейрона в порядке строк матрицы.
+
+        Нужен, чтобы адресоваться к клетке по имени типа («DNp01»), а не по
+        безымянному индексу: иначе именованных входов и выходов не сделать.
+        """
+        if getattr(self, "_ids", None) is None:
+            index, _, _ = _read_classification()
+            ids = np.zeros(self.n, dtype=np.int64)
+            for root_id, i in index.items():
+                if i < self.n:
+                    ids[i] = root_id
+            self._ids = ids
+        return self._ids
 
     # --- стимул ---------------------------------------------------------
     def odor(self, key: str, n_active: int = 120) -> np.ndarray:
-        """Состояние лабораторной -> запах: детерминированный набор рецепторов."""
-        orn = self.pop.olfactory
+        """Состояние лабораторной -> запах: набор проекционных нейронов.
+
+        Стимулируются не рецепторы, а проекционные нейроны антеннальной доли —
+        так же, как в канонических проектах на коннектоме («запах -> DA1_lPN ->
+        клетки Кеньона»). Рецепторы для этого не годятся: до грибовидного тела
+        от них два синапса, и сигнал не доходит.
+        """
+        orn = self.pop.projection
         h = hashlib.blake2b(key.encode("utf-8"), digest_size=16).digest()
         rng = np.random.default_rng(int.from_bytes(h, "little"))
         return rng.choice(orn, size=min(n_active, orn.size), replace=False)
@@ -128,15 +203,21 @@ class FlyBrain:
         v = np.zeros(self.n, dtype=np.float32)
         counts = np.zeros(self.n, dtype=np.float32)
         spikes = np.zeros(self.n, dtype=np.float32)
+        # рефрактерный период: без него нейрон разряжается каждый такт подряд,
+        # гигантское волокно «стреляло» 38 раз из 40 и сигнал терял смысл
+        cool = np.zeros(self.n, dtype=np.int16)
         inj = np.zeros(self.n, dtype=np.float32)
         inj[stim] = drive
         for _ in range(steps):
             v *= self.leak
             v += self.W.dot(spikes)
             v += inj
-            spikes = (v > self.theta).astype(np.float32)
+            v[cool > 0] = 0.0
+            spikes = ((v > self.theta) & (cool <= 0)).astype(np.float32)
             counts += spikes
             v[spikes > 0] = 0.0
+            np.maximum(cool - 1, 0, out=cool)
+            cool[spikes > 0] = self.refractory
         return counts
 
     def kc_response(self, key: str, steps: int = 20, sparsity: float = 0.05) -> np.ndarray:
